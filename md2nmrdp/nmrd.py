@@ -3,7 +3,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.fft import fftfreq,dct
 from scipy.optimize import curve_fit
-
+from . import utils as nmrdu
 
 
 from copy import deepcopy
@@ -11,42 +11,20 @@ import matplotlib.pyplot as plt
 
 
 
-def integrate(x_axis, y_axis, prefactor=None):
-    N_points = len(x_axis)
-    res = np.zeros(N_points)
-    
-    # print(x_axis,y_axis)
-    for x in range(1, N_points):
-        res[x] = simps(y_axis[:x], x_axis[:x])
 
-    if prefactor is not None:
-        res *= prefactor
-        
-    return res
-
-
-def rdf_r4(r,gr):
-    N_points=len(gr)
-    rdf_r= np.zeros(N_points)
-    for count in np.arange(N_points):
-        rdf_r[count]= gr[count]* np.reciprocal(r[count])**4
-    return rdf_r*4*np.pi
-
-
-
-def VFT(T,eta0,B,T0):   
-    return  eta0*np.exp( B/(T-T0) )
 
 class DDrelax():
     
-    def __init__(self, system, Temp, spin=1/2,dt_si=1e-12,dist_si=1e-10):
+    def __init__(self, system, resname_dict, interactions, Temp, spin=1/2,dt_si=1e-12,dist_si=1e-10):
         
         self.system=system
+        self.resnames=resname_dict
         self.Temp=Temp
+        self.all_ia= interactions
         
         self.spin= spin
-        self.dt_si=dt_si   #unit of the timestep 
-        self.dist_si=dist_si   #unit of the distance/postiton 
+        self.dt_si=dt_si   #unit of timestep 
+        self.dist_si=dist_si   #unit of distance 
         
         self.dist_dict= dict()
         
@@ -73,14 +51,14 @@ class DDrelax():
     def convert_average(files):
         # print(files)
         if len(files)==1:
-            ts,corr=np.loadtxt(files[0] ,unpack=True)
-            return ts, corr
+            xData,yData=np.loadtxt(files[0], usecols=[0,1],unpack=True)
+            return xData, yData
         else:
             cum_sum=[]
             for f in files:
-                ts,corr=np.loadtxt(f ,unpack=True)
-                cum_sum.append(corr)
-            return ts, np.mean(cum_sum,axis=0)
+                xData,yData=np.loadtxt(f , usecols=[0,1],unpack=True)
+                cum_sum.append(yData)
+            return xData, np.mean(cum_sum,axis=0)
     
     
     def check_for_att(self, func, res=''):
@@ -99,49 +77,50 @@ class DDrelax():
 
 
     def convert_files(self, filedict, stype):
-        con=dict()
+        con_all=dict()
         con_av=dict()
         for T in filedict.keys():
             print(T)
-            con[T]=dict()
+            con_all[T]=dict()
             con_av[T]=dict()
             
             for pat1 in filedict[T].keys() :
-                con[T][pat1]=dict()
+                con_all[T][pat1]=dict()
                 #check if tupel or dict
                 if isinstance( filedict[T][pat1] ,dict): 
                     # sum up contributions of different atomgroups 
-                    at_cum_sum=0
+                    cum_sum=0
                     for pat2 in filedict[T][pat1].keys():
-                        #convet and average intermolecular contribution over residues
-                        xdata, ref_cum_sum = self.convert_average(filedict[T][pat1][pat2])
-                        con[T][pat1][pat2]= ref_cum_sum
-                        at_cum_sum+=ref_cum_sum
-                    con_av[T][pat1]=at_cum_sum
+                        #convert and average intermolecular contribution over residues
+                        xData, yData = self.convert_average(filedict[T][pat1][pat2])
+                        con_all[T][pat1][pat2]= yData
+                        cum_sum+=yData
+                    con_av[T][pat1]=cum_sum
                 else: 
-                    xdata, ref_cum_sum = self.convert_average(filedict[T][pat1])
-                    con_av[T][pat1]= ref_cum_sum
+                    xData, yData = self.convert_average(filedict[T][pat1])
+                    con_av[T][pat1]= yData
 
 
         if stype=='short':
             print('short assigned')
-            self.tss=xdata
-            self.g2s=con
+            self.tss=xData
+            self.g2s=con_all
             self.g2s_av=con_av
         elif stype=='inter':
             print('inter assigned')
-            self.tsi=xdata
-            self.g2i=con
+            self.tsi=xData
+            self.g2i=con_all
             self.g2i_av=con_av
         elif stype=='long':
             print('long assigned')
-            self.tsl=xdata
-            self.g2l=con
+            self.tsl=xData
+            self.g2l=con_all
             self.g2l_av=con_av
         elif stype=='rdf':
             print('rdf assigned')
-            self.rdfr=xdata
-            self.rdf=con
+            self.rdfr=xData
+            self.rdf=con_all
+            self.rdf_av=con_av
 
 
 
@@ -158,8 +137,8 @@ class DDrelax():
             doac_dict[T]=dict()
             for pat1 in self.rdf[T].keys():
                 rdf=self.rdf[T][pat1]
-                rdf_weighted=rdf_r4(self.rdfr,rdf)
-                rdf_w_sum=integrate(self.rdfr, rdf_weighted)
+                rdf_weighted=nmrdu.rdf_r4(self.rdfr,rdf)
+                rdf_w_sum=nmrdu.integrate(self.rdfr, rdf_weighted)
                 doac= np.power(4*np.pi/3 *rdf_w_sum,1/3)
                 doac_dict[T][pat1]=doac
         
@@ -167,44 +146,35 @@ class DDrelax():
     
 
         
-    def calc_dist_intra(self,system_path,job_dir):
-        
-        try:
-            getattr(self, 'rdf')
-        except AttributeError:
-            raise AttributeError("DDrelax object has no attribute 'rdf'")    
-        
+    def collect_dist_intra(self,path,job_dir="dist_intra"):
+
         dist_intra_dict=dict()
-        # for T in self.rdf.keys():
-        #     dist_intra_dict[T]=dict()
-        #     for pat1 in self.rdf[T].keys():
-                # ff_path=f"{system_path}/forcefield/"
-                # dcd_path=f"{system_path}/{T}K/{job_dir}/myjob.def"
-                # dcd_pattern='*.dcd'                           
-                # psf_pattern='*.psf' 
+        for T in self.Temp:
+            dist_intra_dict[T]=dict()
+            for pat1 in self.all_ia:
+                if "intra" in pat1:
+                    _, nuc= pat1.split('_')
+                    files=nmrdu.listdir_fullpath(f"{path}/{T}K/{job_dir}")
+                    file=nmrdu.filter_files(files,pattern=f"*{nuc}*")
+                    dist_intra= np.loadtxt(file[0], skiprows=1, dtype=float)
+                    dist_intra_dict[T][pat1]=dist_intra
 
-
-        
         self.dist_intra=dist_intra_dict    
         
 
-    def calc_spin_density(self,system_path,job_dir,n_spin_dict):
-
-        try:
-            getattr(self, 'rdf')
-        except AttributeError:
-            raise AttributeError("DDrelax object has no attribute 'rdf'") 
+    def calc_spin_density(self,path,job_dir,n_spin_dict):
         
-        
-        spind_dict=dict()
-        for T in self.rdf.keys():
-            for pat1 in self.rdf[T].keys():
-                job_def=np.loadtxt(f"{system_path}/{T}K/{job_dir}/myjob.def",dtype=str,use_cols=1)
-                box_length=float(job_def[-1])
-                n_spin= n_spin_dict[pat1]
-                spind_dict[T][pat1]=  n_spin*np.reciprocal(box_length)**3
-                
-        self.spind=spind_dict
+        spinden_dict=dict()
+        for T in self.Temp:
+            spinden_dict[T]=dict()
+            for pat1 in self.all_ia:
+                if "inter" in pat1:
+                    job_def=np.loadtxt(f"{path}/{T}K/{job_dir}/myjob.def",dtype=str, usecols=1)
+                    box_length=float(job_def[-1])
+                    n_spin= n_spin_dict[pat1]
+                    spinden_dict[T][pat1]=  n_spin*np.reciprocal(box_length*1e-10)**3
+                    
+        self.spin_density=spinden_dict
                 
         
         
@@ -259,8 +229,8 @@ class DDrelax():
     def calc_R1(self,_interpol1,b_field,interaction,nuc1,nuc2,dist):
         
         gyros={'H': 42.577*1e6, 'F':40.053*1e6, 'P':17.253*1e6} # Hz*T^-1
-        fac1=2/15 #factor 2 is already involed in dct?
-        fac2=2/5  #factor 2 is already involed in dct?
+        fac1=1/15 #factor 2 is already involed in dct?
+        fac2=1/5  #factor 2 is already involed in dct?
 
         spec_av_intra={ 'FH': fac1,'HF': fac1, 'HP':fac1, 'PH':fac1, 'FF': fac2, 'HH':fac2, 'PP': fac1} 
         spec_av_inter={ 'FH': fac1,'HF': fac1, 'FF': fac2, 'HH':fac2} 
@@ -273,7 +243,7 @@ class DDrelax():
             spec_av= spec_av_inter[nuclei]
         
         
-        pre_factor= spec_av*self.constants*gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist
+        pre_factor= spec_av*self.constants*gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist*self.dt_si
         con=[]
         for b in b_field:
             
@@ -312,10 +282,10 @@ class DDrelax():
                 for ia_nuclei in relevant_ia:
                     ia, nuclei=ia_nuclei.split("_")
                     
-                    if ( hasattr(self,'doac') and hasattr(self,'spind') )and ia == "inter":
+                    if ( hasattr(self,'doac') and hasattr(self,'spin_density') )and ia == "inter":
                         doac=self.doac[T][ia_nuclei]
-                        spin_density=self.spind[T][ia_nuclei]
-                        dist= 4*np.pi * np.reciprocal(doac)**3*spin_density *np.reciprocal(self.dist_si)**6 
+                        spin_density=self.spin_density[T][ia_nuclei]
+                        dist= 4*np.pi * np.reciprocal(doac)**3 *spin_density *np.reciprocal(self.dist_si)**6 
                         
                     elif ( hasattr(self,'dist_intra')  )and ia == "intra":  
                         doac_intra= self.dist_intra[T][ia_nuclei] 
@@ -347,7 +317,7 @@ class DDrelax():
     
     
 
-    def plot_Tsuperposition(self, function, file_path, relevant_nuclei):
+    def plot_Tsuperposition(self,  file_path, function,relevant_nuclei):
         
         con_x,con_types=self.check_for_att(function[0] )
         con_y,con_types=self.check_for_att(function[1], res='_av')
@@ -357,16 +327,23 @@ class DDrelax():
             
             fig, ax=plt.subplots()
             vft_params=np.loadtxt(file_path, dtype=float, skiprows=1)
-            eta_max=VFT(max(self.Temp),*vft_params)
+            eta_max=nmrdu.VFT(max(self.Temp),*vft_params)
             for T in yDict.keys():
-                eta=VFT(T,*vft_params)
+                eta=nmrdu.VFT(T,*vft_params)
                 
                 for ia_nuclei in relevant_nuclei:
                     yData=yDict[T][ia_nuclei]
-                    if function == "g2":
+                    
+                    if function[1] == "g2":
                         yData=yData/max(yData)
+                        xData_w=xData  *eta_max/eta
+                    elif function[1] == "sdf":
+                        yData=yData #/max(yData)
+                        xData_w=xData #* eta/eta_max
                         
-                    xData_w=xData*eta/eta_max
+                    elif function[1] == "R1":
+                        yData=yData
+                        
                     ax.plot(xData_w,yData, label=f'{ia_nuclei} {T}K')
         
         return fig, ax
