@@ -35,13 +35,24 @@ def find_filepaths(system_path, Temp, stype,job_dir="dipole_relax", collect_tota
             
             
             cond="collect_total"
-            if inter==True:
-                cond+= " and key.split('_')[0] == 'inter'"
             
             if eval(cond):
-                pat2=f'*major*'
-                res_files= filter_files(files, pat2) 
-                dd_dict[T][key]=res_files        
+                pat2=f'*total*'
+                res_files= filter_files(files, pat2)
+                
+                if len(res_files) == 0:
+                    for value in pattern[key]:
+                        pat2=f'*{value}*'
+                        res_files= filter_files(files, pat2) 
+                        if len(res_files) > 0:
+                            dd_dict[T][key][value]=res_files
+                        else:
+                            pat2=f'*major*'
+                            res_files= filter_files(files, pat2) 
+                            dd_dict[T][key]=res_files
+                dd_dict[T][key]=res_files
+                
+                
             else:
                 for value in pattern[key]:
                     pat2=f'*{value}*'
@@ -49,7 +60,7 @@ def find_filepaths(system_path, Temp, stype,job_dir="dipole_relax", collect_tota
                     if len(res_files) > 0:
                         dd_dict[T][key][value]=res_files
                     else:
-                        pat2=f'*total*'
+                        pat2=f'*major*'
                         res_files= filter_files(files, pat2) 
                         dd_dict[T][key]=res_files
                     

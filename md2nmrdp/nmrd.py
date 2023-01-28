@@ -136,11 +136,14 @@ class DDrelax():
         for T in self.rdf.keys():
             doac_dict[T]=dict()
             for pat1 in self.rdf[T].keys():
-                rdf=self.rdf[T][pat1]
-                rdf_weighted=nmrdu.rdf_r4(self.rdfr,rdf)
-                rdf_w_sum=nmrdu.integrate(self.rdfr, rdf_weighted)
-                doac= np.power(4*np.pi/3 *rdf_w_sum,1/3)
-                doac_dict[T][pat1]=doac
+                
+                if "inter" in pat1:
+                    rdf=self.rdf_av[T][pat1]
+                    # print(len(self.rdfr), len(rdf))
+                    rdf_weighted=nmrdu.rdf_r4(self.rdfr,rdf)
+                    rdf_w_sum=nmrdu.integrate(self.rdfr, rdf_weighted)
+                    doac= np.power(4*np.pi/(3 *rdf_w_sum[-1]),1/3)
+                    doac_dict[T][pat1]=doac
         
         self.doac=doac_dict
     
@@ -153,9 +156,9 @@ class DDrelax():
             dist_intra_dict[T]=dict()
             for pat1 in self.all_ia:
                 if "intra" in pat1:
-                    _, nuc= pat1.split('_')
+                    _, nuc, iontype= pat1.split('_')
                     files=nmrdu.listdir_fullpath(f"{path}/{T}K/{job_dir}")
-                    file=nmrdu.filter_files(files,pattern=f"*{nuc}*")
+                    file=nmrdu.filter_files(files,pattern=f"*{nuc}*{iontype}*")
                     dist_intra= np.loadtxt(file[0], skiprows=1, dtype=float)
                     dist_intra_dict[T][pat1]=dist_intra
 
@@ -166,14 +169,17 @@ class DDrelax():
         
         spinden_dict=dict()
         for T in self.Temp:
+            print(T)
             spinden_dict[T]=dict()
             for pat1 in self.all_ia:
                 if "inter" in pat1:
                     job_def=np.loadtxt(f"{path}/{T}K/{job_dir}/myjob.def",dtype=str, usecols=1)
                     box_length=float(job_def[-1])
+
                     n_spin= n_spin_dict[pat1]
-                    spinden_dict[T][pat1]=  n_spin*np.reciprocal(box_length*1e-10)**3
-                    
+                    spinden_dict[T][pat1]=  n_spin/ box_length**3
+                    print( n_spin/ box_length**3)
+                        
         self.spin_density=spinden_dict
                 
         
@@ -229,37 +235,26 @@ class DDrelax():
     def calc_R1(self,_interpol1,b_field,interaction,nuc1,nuc2,dist):
         
         gyros={'H': 42.577*1e6, 'F':40.053*1e6, 'P':17.253*1e6} # Hz*T^-1
-        fac1=1/15 #factor 2 is already involed in dct?
-        fac2=1/5  #factor 2 is already involed in dct?
 
-        spec_av_intra={ 'FH': fac1,'HF': fac1, 'HP':fac1, 'PH':fac1, 'FF': fac2, 'HH':fac2, 'PP': fac1} 
-        spec_av_inter={ 'FH': fac1,'HF': fac1, 'FF': fac2, 'HH':fac2} 
-    
-    
-        nuclei=nuc1+nuc2
-        if interaction == 'intra':
-            spec_av= spec_av_intra[nuclei]
-        elif interaction == 'inter':
-            spec_av= spec_av_inter[nuclei]
+        pre_factor= self.constants*gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist*self.dt_si
         
-        
-        pre_factor= spec_av*self.constants*gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist*self.dt_si
         con=[]
         for b in b_field:
             
             w1=gyros[nuc1]*b
             w2=gyros[nuc2]*b
             
-            if spec_av == fac2: #1/5
+            if nuc1 == nuc2:
+                spec_av= 1/5
                 J_w=_interpol1(w1) 
                 J_w2=_interpol1(w2*2)  
-                R= pre_factor*(J_w+ 4*J_w2)
-
-            if spec_av == fac1:
+                R= spec_av*pre_factor*(J_w+ 4*J_w2)
+            else:
+                spec_av= 1/15
                 J_w=_interpol1( np.abs(w1-w2) )
                 J_w2=_interpol1(w1)   
                 J_w3=_interpol1(w1+w2)   
-                R= pre_factor*(J_w+3*J_w2+6*J_w3)
+                R= spec_av*pre_factor*(J_w+3*J_w2+6*J_w3)
                 
             con.append(R)
         
@@ -280,26 +275,25 @@ class DDrelax():
                 R1[T]=dict()
                 dist_dict[T]=dict()
                 for ia_nuclei in relevant_ia:
-                    ia, nuclei=ia_nuclei.split("_")
+                    ia, nuclei,iontype=ia_nuclei.split("_")
                     
-                    if ( hasattr(self,'doac') and hasattr(self,'spin_density') )and ia == "inter":
+                    if ( hasattr(self,'doac') and hasattr(self,'spin_density') ) and ia == "inter":
                         doac=self.doac[T][ia_nuclei]
                         spin_density=self.spin_density[T][ia_nuclei]
-                        dist= 4*np.pi * np.reciprocal(doac)**3 *spin_density *np.reciprocal(self.dist_si)**6 
+                        dist_cont= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
                         
                     elif ( hasattr(self,'dist_intra')  )and ia == "intra":  
                         doac_intra= self.dist_intra[T][ia_nuclei] 
-                        dist= np.reciprocal(doac_intra*self.dist_si)**6
+                        dist_cont= 1/(doac_intra*self.dist_si)**6
                         
                     else:
-                        dist=g2[T][ia_nuclei][0]*np.reciprocal(self.dist_si)**6 
-                        dist_dict[T][ia_nuclei]=dist
-                        print(f"{ia} {nuclei} r^-6 = {dist:.3e}")
+                        dist_cont=g2[T][ia_nuclei][0]*np.reciprocal(self.dist_si)**6 
+                        dist_dict[T][ia_nuclei]=dist_cont
                     
                     sdf_sel=sdf[T][ia_nuclei]
                     N=len(sdf_sel)
                     _interpol1=interp1d(freq, sdf_sel) #, kind='nearest', fill_value="extrapolate")
-                    R1_cont=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist)
+                    R1_cont=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist_cont)
                     
                     R1[T][ia_nuclei]=R1_cont
 
@@ -314,6 +308,8 @@ class DDrelax():
         self.dist_dict.update(dist_dict)
         R1_array, _ =self.check_for_att( 'R1') 
         return R1_array
+    
+    
     
     
 
