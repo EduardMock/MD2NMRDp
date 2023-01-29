@@ -49,7 +49,6 @@ class DDrelax():
         
     @staticmethod
     def convert_average(files):
-        # print(files)
         if len(files)==1:
             xData,yData=np.loadtxt(files[0], usecols=[0,1],unpack=True)
             return xData, yData
@@ -80,7 +79,6 @@ class DDrelax():
         con_all=dict()
         con_av=dict()
         for T in filedict.keys():
-            print(T)
             con_all[T]=dict()
             con_av[T]=dict()
             
@@ -139,7 +137,6 @@ class DDrelax():
                 
                 if "inter" in pat1:
                     rdf=self.rdf_av[T][pat1]
-                    # print(len(self.rdfr), len(rdf))
                     rdf_weighted=nmrdu.rdf_r4(self.rdfr,rdf)
                     rdf_w_sum=nmrdu.integrate(self.rdfr, rdf_weighted)
                     doac= np.power(4*np.pi/(3 *rdf_w_sum[-1]),1/3)
@@ -169,7 +166,6 @@ class DDrelax():
         
         spinden_dict=dict()
         for T in self.Temp:
-            print(T)
             spinden_dict[T]=dict()
             for pat1 in self.all_ia:
                 if "inter" in pat1:
@@ -178,7 +174,6 @@ class DDrelax():
 
                     n_spin= n_spin_dict[pat1]
                     spinden_dict[T][pat1]=  n_spin/ box_length**3
-                    print( n_spin/ box_length**3)
                         
         self.spin_density=spinden_dict
                 
@@ -194,7 +189,6 @@ class DDrelax():
             
             # calc timestep
             dt=(ts[1]-ts[0]) #*dt_si
-            # print(dt)
             
             for T in g2.keys():
                 sdf[T]=dict()
@@ -203,7 +197,7 @@ class DDrelax():
                     corr=g2[T][pat1]
                     norm_factor=max(corr)
                     corr_norm=deepcopy(corr)/norm_factor
-                    # print(corr_norm[0])
+
                     
                     #cosine transform
                     #NOTE: dt_si will be multiplied later -> better interpolation 
