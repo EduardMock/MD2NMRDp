@@ -2,6 +2,7 @@
 
 import os, fnmatch
 import numpy as np
+import pandas as pd
 from tkinter import Tcl
 from scipy.integrate import simps 
 
@@ -70,12 +71,10 @@ def find_filepaths(system_path, Temp, stype,job_dir="dipole_relax", collect_tota
     return dd_dict
 
 
-# def integrate_rdf(gr,r,rho):
-#     cum_sum=0
-#     for gr_i,r_i in zip(gr,r):
-#         cum_sum+= gr_i* np.reciprocal(r_i)**4
-#     cum_sum*=4*np.pi*rho
-#     return cum_sum
+def transpose_dict(InputDict):
+    df=pd.DataFrame(InputDict)
+    return df.T.to_dict()
+
 
 
 def integrate(x_axis, y_axis, prefactor=None):

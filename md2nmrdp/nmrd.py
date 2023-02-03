@@ -304,39 +304,99 @@ class DDrelax():
         return R1_array
     
     
-    
-    
-
-    def plot_Tsuperposition(self,  file_path, function,relevant_nuclei):
+    def Tsuperposition(self, file_path, function, T_shift, skip, new_Temp=None):
         
-        con_x,con_types=self.check_for_att(function[0] )
-        con_y,con_types=self.check_for_att(function[1], res='_av')
 
+        xData=getattr(self, function[0])
+        yDict=getattr(self, function[1])
 
-        for (xData,yDict,stype) in zip(con_x, con_y, con_types):
+        vft_params=np.loadtxt(file_path, dtype=float, skiprows=1)
+        Tmax=T_shift
+    
+        # Tmin=min(Temp)
+        eta_max=nmrdu.VFT(Tmax,*vft_params)
+        yDict=nmrdu.transpose_dict(yDict)
+        # xData_trim=xData
+    
+        master=dict()                              
+        for nuclei in yDict.keys():
+            cum_sum=[]
+            Temp=list(yDict[nuclei].keys())[skip:]
+            for T in Temp:
+                eta=nmrdu.VFT(T,*vft_params)
+
+                xData_w=xData *eta_max/eta
+                # if T==Temp[0]:
+                #     xData_trim=xData_w
+                    
+                yData=yDict[nuclei][T]
+                yData=yData/max(yData)
+                
+                extrapol=np.mean(yDict[nuclei][Tmax][-200:])
+                
+                _interpol1=interp1d(xData_w ,yData ,fill_value=(1,extrapol), bounds_error=False) 
+                yData_w=_interpol1(xData)
+                cum_sum.append(yData_w)         
+                            
+            master_curve=np.mean(cum_sum, axis=0)    
+            master[nuclei]=master_curve
+        
+        if new_Temp is not None:
+            g2_master=dict()  
+            for T in new_Temp:
+                eta=nmrdu.VFT(T,*vft_params)
+                g2_master[T]=dict()
+                for nuclei in yDict.keys():
+                    yData=master[nuclei]
+                    xData_w=xData *eta/eta_max
+                    _interpol1=interp1d(xData_w ,yData ) #,fill_value="extrapolate" ) 
+                    yData_w=_interpol1(xData)
+                    g2_master[T][nuclei]=yData_w
+            # print(g2_master)
+            self.tsm=xData
+            self.g2m_av=g2_master
+                
             
-            fig, ax=plt.subplots()
+        
+
+    def plot_Tsuperposition(self, ax, file_path,   function, nuclei,T_shift=None, shift=True):
+
+        # con_x,con_types=self.check_for_att(function[0] )
+        # con_y,con_types=self.check_for_att(function[1], res=res)
+        # for (xData,yDict,stype) in zip(con_x, con_y, con_types):
+        xData=getattr(self, function[0])
+        yDict=getattr(self, function[1])
+            
+
             vft_params=np.loadtxt(file_path, dtype=float, skiprows=1)
-            eta_max=nmrdu.VFT(max(self.Temp),*vft_params)
+        if T_shift is not None:
+            Tref=T_shift
+        else:
+            Tref=max(yDict.keys())
+            
+        eta_max=nmrdu.VFT(Tref,*vft_params)
+        
             for T in yDict.keys():
                 eta=nmrdu.VFT(T,*vft_params)
                 
-                for ia_nuclei in relevant_nuclei:
-                    yData=yDict[T][ia_nuclei]
+            yData=yDict[T][nuclei]
                     
-                    if function[1] == "g2":
+            if "g2" in function[1] and not shift: 
+                yData=yData
+                xData_w=xData 
+            elif "g2" in function[1] and shift:
                         yData=yData/max(yData)
-                        xData_w=xData  *eta_max/eta
-                    elif function[1] == "sdf":
+                xData_w=xData *eta_max/eta   
+            elif "sdf" in function[1]:
                         yData=yData #/max(yData)
                         xData_w=xData #* eta/eta_max
                         
-                    elif function[1] == "R1":
+            elif "R1" in function[1]:
                         yData=yData
                         
-                    ax.plot(xData_w,yData, label=f'{ia_nuclei} {T}K')
+            ax.plot(xData_w,yData, label=f'{T}K')
         
-        return fig, ax
+        return  ax
 
 
 
