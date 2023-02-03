@@ -223,7 +223,14 @@ class DDrelax():
                 self.sdfl_av=sdf
                 self.freql=freq
 
+    def interpoalte_parameter(self,parameter_string,ia_key,T):
+        class_parameter=getattr(self, parameter_string )
+        class_parameter_T= nmrdu.transpose_dict(class_parameter)
+        parameter= np.array(list(class_parameter_T[ia_key].values()))
+        _interpol1=interp1d( self.Temp ,parameter , bounds_error=False) 
+        inpol_parameter= _interpol1(T)
             
+        return inpol_parameter
 
             
     def calc_R1(self,_interpol1,b_field,interaction,nuc1,nuc2,dist):
@@ -255,21 +262,27 @@ class DDrelax():
         return con 
     
     
-    def calc_Dprofile(self,relevant_ia,freq_list):
+    def calc_Dprofile(self,stype,relevant_ia,freq_list):
 
-        con_g2,con_types=self.check_for_att( 'g2', res='_av')
-        con_sdf,con_types=self.check_for_att( 'sdf', res='_av')
-        con_freq,con_types=self.check_for_att( 'freq' )
+        # con_g2,con_types=self.check_for_att( 'g2', res='_av')
+        # con_sdf,con_types=self.check_for_att( 'sdf', res='_av')
+        # con_freq,con_types=self.check_for_att( 'freq' )
+        # for (g2, sdf,freq, stype) in zip(con_g2, con_sdf, con_freq,con_types):
         
-        dist_dict=dict()
-        for (g2, sdf,freq, stype) in zip(con_g2, con_sdf, con_freq,con_types):
+        g2=getattr(self, f"g2{stype}")
+        sdf=getattr(self, f"sdf{stype}")
+        freq=getattr(self, f"freq{stype}")
+
+        
             b_field=freq_list/(42.577*1e6)
             R1=dict()
             for T in sdf.keys():
                 R1[T]=dict()
-                dist_dict[T]=dict()
+
                 for ia_nuclei in relevant_ia:
                     ia, nuclei,iontype=ia_nuclei.split("_")
+                
+                if T in self.Temp:  
                     
                     if ( hasattr(self,'doac') and hasattr(self,'spin_density') ) and ia == "inter":
                         doac=self.doac[T][ia_nuclei]
@@ -282,7 +295,7 @@ class DDrelax():
                         
                     else:
                         dist_cont=g2[T][ia_nuclei][0]*np.reciprocal(self.dist_si)**6 
-                        dist_dict[T][ia_nuclei]=dist_cont
+
                     
                     sdf_sel=sdf[T][ia_nuclei]
                     N=len(sdf_sel)
@@ -291,13 +304,28 @@ class DDrelax():
                     
                     R1[T][ia_nuclei]=R1_cont
 
+                #if master curve is used -> interpolate to all temperatures
+                else:
+                            
+                    if ( hasattr(self,'doac') and hasattr(self,'spin_density') ) and ia == "inter":
+                        doac= self.interpoalte_parameter('doac',ia_nuclei,T)
+                        spin_density=self.interpoalte_parameter('spin_density',ia_nuclei,T)
+                        dist_cont= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
+                        
+                    elif ( hasattr(self,'dist_intra')  )and ia == "intra":  
+                        doac_intra= self.interpoalte_parameter('dist_intra',ia_nuclei,T)
+                        dist_cont= 1/(doac_intra*self.dist_si)**6
+                        
+                    else:
+                        dist_cont=self.interpoalte_parameter('dist',ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
 
-            if "s" in stype:
-                self.R1s=R1
-            elif "i" in stype:
-                self.R1i=R1
-            elif "l" in stype:
-                self.R1l=R1
+                    
+                    sdf_sel=sdf[T][ia_nuclei]
+                    N=len(sdf_sel)
+                    _interpol1=interp1d(freq, sdf_sel) #, kind='nearest', fill_value="extrapolate")
+                    R1_cont=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist_cont)
+
+                    R1[T][ia_nuclei]=R1_cont
         
         self.dist_dict.update(dist_dict)
         R1_array, _ =self.check_for_att( 'R1') 
