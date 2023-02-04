@@ -103,14 +103,16 @@ class DDrelax():
                         xData, yData = self.convert_average(filedict[T][pat1][pat2])
                         con_all[T][pat1][pat2]= yData
                         cum_sum+=yData
-                    con_av[T][pat1]=cum_sum
                     dist_dict[T][pat1]= cum_sum[0]
+                    con_av[T][pat1]=cum_sum
+                    
                 else: 
                     xData, yData = self.convert_average(filedict[T][pat1])
-                    con_av[T][pat1]= yData
                     dist_dict[T][pat1]= yData[0]
+                    con_av[T][pat1]= yData
 
         if stype in ['short','inter','long']:
+            print(f"G2: stype {stype} assigned")
             self.set_stype( 'g2',stype,con_all, restype='all')
             self.set_stype('g2',stype, con_av)
             self.set_stype('dist',stype, dist_dict)
@@ -128,7 +130,7 @@ class DDrelax():
     def calc_doac(self, stype='i'):
         
         try:
-            getattr(self, 'rdf')
+            rdf=getattr(self, f'rdf')
         except AttributeError:
             raise AttributeError("DDrelax object has no attribute 'rdf'")    
         
@@ -210,9 +212,14 @@ class DDrelax():
         
         
     def calc_sdf(self,stype='i'):
+
+        try:
+            g2=getattr(self, f"g2{stype}")
+            ts=getattr(self, f"ts{stype}")
+        except AttributeError:
+            raise AttributeError("DDrelax object has no attribute 'g2' or 'ts' ")  
         
-        g2=getattr(self, f"g2{stype}")
-        ts=getattr(self, f"ts{stype}")
+
         
         sdf=dict()  #collect all sdf
         # calc timestep
@@ -238,8 +245,10 @@ class DDrelax():
         #calc frequency axis
         freq=fftfreq(N,dt*self.dt_si)[:N//2]
         
+        
         self.set_stype( 'sdf',stype,sdf)
         self.set_stype('freq',stype, freq)
+        print(f"SDF: stype {stype} assigned")
 
             
             
@@ -257,7 +266,7 @@ class DDrelax():
         
         gyros={'H': 42.577*1e6, 'F':40.053*1e6, 'P':17.253*1e6} # Hz*T^-1
 
-        pre_factor= self.constants*gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist*self.dt_si
+        pre_factor= self.constants*gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist*self.dt_si*512
         
         con=[]
         for b in b_field:
@@ -266,7 +275,7 @@ class DDrelax():
             w2=gyros[nuc2]*b
             
             if nuc1 == nuc2:
-                spec_av= 1/5
+                spec_av= 2/5
                 J_w=_interpol1(w1) 
                 J_w2=_interpol1(w2*2)  
                 R= spec_av*pre_factor*(J_w+ 4*J_w2)
@@ -282,79 +291,87 @@ class DDrelax():
         return con 
     
     
-    def calc_Dprofile(self,stype,relevant_ia,freq_list):
-
-        # con_g2,con_types=self.check_for_att( 'g2', res='_av')
-        # con_sdf,con_types=self.check_for_att( 'sdf', res='_av')
-        # con_freq,con_types=self.check_for_att( 'freq' )
-        # for (g2, sdf,freq, stype) in zip(con_g2, con_sdf, con_freq,con_types):
+    def calc_Dprofile(self, restype, relevant_ia, freq_list,  parameter_stype='i', stype='i'):
         
-        g2=getattr(self, f"g2{stype}")
-        sdf=getattr(self, f"sdf{stype}")
+        # set freqlist for calculation
+        self.set_stype( 'v', stype, freq_list*1e-6,  restype=restype)
+
+        # spectral density
+        sdf_dict=getattr(self, f"sdf{stype}")
         freq=getattr(self, f"freq{stype}")
+
+        #prefactor
+        doac_dict=getattr(self, f"doac{parameter_stype}")
+        spin_density_dict=getattr(self, f"spin_density{parameter_stype}")
+        dist_intra_dict=getattr(self, f"dist_intra{parameter_stype}")
+        dist_dict=getattr(self, f"dist{parameter_stype}")
 
 
         b_field=freq_list/(42.577*1e6)
-        R1=dict()
-        for T in sdf.keys():
-            R1[T]=dict()
+        R1_dict=dict()
+        for T in sdf_dict.keys():
+            R1_dict[T]=dict()
 
-            for ia_nuclei in relevant_ia:
-                ia, nuclei,iontype=ia_nuclei.split("_")
-                
-                if T in self.Temp:  
+            if T in self.Temp: 
+
+                for ia_nuclei in relevant_ia:
+                    ia, nuclei,iontype=ia_nuclei.split("_")
                     
-                    if ( hasattr(self,'doac') and hasattr(self,'spin_density') ) and ia == "inter":
-                        doac=self.doac[T][ia_nuclei]
-                        spin_density=self.spin_density[T][ia_nuclei]
-                        dist_cont= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
+                    if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter":
+                        doac=doac_dict[T][ia_nuclei]
+                        spin_density=spin_density_dict[T][ia_nuclei]
+                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
                         
-                    elif ( hasattr(self,'dist_intra')  )and ia == "intra":  
-                        doac_intra= self.dist_intra[T][ia_nuclei] 
-                        dist_cont= 1/(doac_intra*self.dist_si)**6
+                    elif ( hasattr(self,f'dist_intra{parameter_stype}')  )and ia == "intra":  
+                        doac_intra= dist_intra_dict[T][ia_nuclei] 
+                        dist= 1/(doac_intra*self.dist_si)**6
                         
                     else:
-                        dist_cont=g2[T][ia_nuclei][0]*np.reciprocal(self.dist_si)**6 
+                        dist=dist_dict[T][ia_nuclei] 
+                        dist*=np.reciprocal(self.dist_si)**6 
 
                     
-                    sdf_sel=sdf[T][ia_nuclei]
-                    N=len(sdf_sel)
-                    _interpol1=interp1d(freq, sdf_sel) #, kind='nearest', fill_value="extrapolate")
-                    R1_cont=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist_cont)
-                    
-                    R1[T][ia_nuclei]=R1_cont
+                    sdf=sdf_dict[T][ia_nuclei]
+                    _interpol1=interp1d(freq, sdf) 
+                    R1=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist)
+                    R1_dict[T][ia_nuclei]=R1
                 
-                #if master curve is used -> interpolate to all temperatures
-                else:
+
+            #if master curve is used -> interpolate to all temperatures
+            else:
+
+                for ia_nuclei in relevant_ia:
+                    ia, nuclei,iontype=ia_nuclei.split("_")
                             
-                    if ( hasattr(self,'doac') and hasattr(self,'spin_density') ) and ia == "inter":
-                        doac= self.interpoalte_parameter('doac',ia_nuclei,T)
-                        spin_density=self.interpoalte_parameter('spin_density',ia_nuclei,T)
-                        dist_cont= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
+                    if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter":
+                        doac= self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T)
+                        spin_density=self.interpoalte_parameter(f'spin_density{parameter_stype}',ia_nuclei,T)
+                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
                         
-                    elif ( hasattr(self,'dist_intra')  )and ia == "intra":  
-                        doac_intra= self.interpoalte_parameter('dist_intra',ia_nuclei,T)
-                        dist_cont= 1/(doac_intra*self.dist_si)**6
+                    elif ( hasattr(self,f'dist_intra{parameter_stype}')  )and ia == "intra":  
+                        doac_intra= self.interpoalte_parameter(f'dist_intra{parameter_stype}',ia_nuclei,T)
+                        dist= 1/(doac_intra*self.dist_si)**6
                         
                     else:
-                        dist_cont=self.interpoalte_parameter('dist',ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
+                        dist=self.interpoalte_parameter(f'dist{parameter_stype}', ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
 
                     
-                    sdf_sel=sdf[T][ia_nuclei]
-                    N=len(sdf_sel)
-                    _interpol1=interp1d(freq, sdf_sel) #, kind='nearest', fill_value="extrapolate")
-                    R1_cont=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist_cont)
-                    
-                    R1[T][ia_nuclei]=R1_cont
+                    sdf=sdf_dict[T][ia_nuclei]
+                    _interpol1=interp1d(freq, sdf) 
+                    R1=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist)
+                    R1_dict[T][ia_nuclei]=R1
 
-        self.set_stype( 'R1',stype,R1)
+
+        self.set_stype('R1', stype, R1_dict, restype=restype)
+        print(f"R1: stype {stype} and restype {restype} assigned")
         R1_array, _ =self.check_for_att( 'R1') 
         
         return R1_array
     
+
+
     
     def Tsuperposition(self, file_path, function, T_shift, skip, new_Temp=None):
-        
 
         xData=getattr(self, function[0])
         yDict=getattr(self, function[1])
@@ -401,21 +418,22 @@ class DDrelax():
                     _interpol1=interp1d(xData_w ,yData ) #,fill_value="extrapolate" ) 
                     yData_w=_interpol1(xData)
                     g2_master[T][nuclei]=yData_w
-            # print(g2_master)
-            self.tsm=xData
-            self.g2m_av=g2_master
+
+            self.set_stype('ts', stype='m', value=xData)
+            self.set_stype('g2', stype='m', value=g2_master)
+            print(f"stype m assigned")
+
                 
-            
     
 
-    def plot_Tsuperposition(self, ax, file_path,   function, nuclei,T_shift=None, shift=True):
+
+    def plot_Tsuperposition(self, ax, file_path, function, nuclei, T_shift=None, shift=True):
         
         # con_x,con_types=self.check_for_att(function[0] )
         # con_y,con_types=self.check_for_att(function[1], res=res)
         # for (xData,yDict,stype) in zip(con_x, con_y, con_types):
         xData=getattr(self, function[0])
         yDict=getattr(self, function[1])
-
 
         vft_params=np.loadtxt(file_path, dtype=float, skiprows=1)
         if T_shift is not None:
