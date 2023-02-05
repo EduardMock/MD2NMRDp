@@ -262,7 +262,7 @@ class DDrelax():
         return inpol_parameter
             
             
-    def calc_R1(self,_interpol1,b_field,interaction,nuc1,nuc2,dist):
+    def calc_R1(self,_interpol1,b_field,nuc1,nuc2,dist):
         
         gyros={'H': 42.577*1e6, 'F':40.053*1e6, 'P':17.253*1e6} # Hz*T^-1
 
@@ -280,7 +280,7 @@ class DDrelax():
                 J_w2=_interpol1(w2*2)  
                 R= spec_av*pre_factor*(J_w+ 4*J_w2)
             else:
-                spec_av= 1/15
+                spec_av= 2/15
                 J_w=_interpol1( np.abs(w1-w2) )
                 J_w2=_interpol1(w1)   
                 J_w3=_interpol1(w1+w2)   
@@ -315,7 +315,7 @@ class DDrelax():
             if T in self.Temp: 
 
                 for ia_nuclei in relevant_ia:
-                    ia, nuclei,iontype=ia_nuclei.split("_")
+                    ia, nuclei,_=ia_nuclei.split("_")
                     
                     if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter" and not force:
                         doac=doac_dict[T][ia_nuclei]
@@ -327,14 +327,13 @@ class DDrelax():
                         dist= 1/(doac_intra*self.dist_si)**6
                         
                     else:
-                        print('yes')
                         dist=dist_dict[T][ia_nuclei] 
                         dist*=np.reciprocal(self.dist_si)**6 
 
                     
                     sdf=sdf_dict[T][ia_nuclei]
                     _interpol1=interp1d(freq, sdf) 
-                    R1=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist)
+                    R1=self.calc_R1(_interpol1,b_field,nuclei[0],nuclei[1],dist)
                     R1_dict[T][ia_nuclei]=R1
                 
 
@@ -342,7 +341,7 @@ class DDrelax():
             else:
 
                 for ia_nuclei in relevant_ia:
-                    ia, nuclei,iontype=ia_nuclei.split("_")
+                    ia, nuclei,_=ia_nuclei.split("_")
                             
                     if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter" and not force:
                         doac= self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T)
@@ -359,7 +358,7 @@ class DDrelax():
                     
                     sdf=sdf_dict[T][ia_nuclei]
                     _interpol1=interp1d(freq, sdf) 
-                    R1=self.calc_R1(_interpol1,b_field,ia,nuclei[0],nuclei[1],dist)
+                    R1=self.calc_R1(_interpol1,b_field,nuclei[0],nuclei[1],dist)
                     R1_dict[T][ia_nuclei]=R1
 
 
@@ -394,13 +393,11 @@ class DDrelax():
                 eta=nmrdu.VFT(T,*vft_params)
                 
                 xData_w=xData *eta_max/eta
-                # if T==Temp[0]:
-                #     xData_trim=xData_w
                     
                 yData=yDict[nuclei][T]
                 yData=yData/max(yData)
                 
-                extrapol=np.mean(yDict[nuclei][Tmax][-500:])
+                extrapol=np.mean(yDict[nuclei][Tmax][-50:])
                 
                 _interpol1=interp1d(xData_w ,yData ,fill_value=(1,extrapol), bounds_error=False) 
                 yData_w=_interpol1(xData)
