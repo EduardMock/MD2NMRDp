@@ -326,7 +326,8 @@ class DDrelax():
                         doac_intra= dist_intra_dict[T][ia_nuclei] 
                         dist= 1/(doac_intra*self.dist_si)**6
                         
-                    elif force:
+                    else:
+                        print('yes')
                         dist=dist_dict[T][ia_nuclei] 
                         dist*=np.reciprocal(self.dist_si)**6 
 
@@ -343,12 +344,12 @@ class DDrelax():
                 for ia_nuclei in relevant_ia:
                     ia, nuclei,iontype=ia_nuclei.split("_")
                             
-                    if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter":
+                    if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter" and not force:
                         doac= self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T)
                         spin_density=self.interpoalte_parameter(f'spin_density{parameter_stype}',ia_nuclei,T)
                         dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
                         
-                    elif ( hasattr(self,f'dist_intra{parameter_stype}')  )and ia == "intra":  
+                    elif ( hasattr(self,f'dist_intra{parameter_stype}')  )and ia == "intra" and not force:  
                         doac_intra= self.interpoalte_parameter(f'dist_intra{parameter_stype}',ia_nuclei,T)
                         dist= 1/(doac_intra*self.dist_si)**6
                         
