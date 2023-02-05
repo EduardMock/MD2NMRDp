@@ -291,7 +291,7 @@ class DDrelax():
         return con 
     
     
-    def calc_Dprofile(self, restype, relevant_ia, freq_list,  parameter_stype='i', stype='i'):
+    def calc_Dprofile(self, restype, relevant_ia, freq_list,  parameter_stype='i', stype='i', force=False):
         
         # set freqlist for calculation
         self.set_stype( 'v', stype, freq_list*1e-6,  restype=restype)
@@ -317,16 +317,16 @@ class DDrelax():
                 for ia_nuclei in relevant_ia:
                     ia, nuclei,iontype=ia_nuclei.split("_")
                     
-                    if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter":
+                    if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter" and not force:
                         doac=doac_dict[T][ia_nuclei]
                         spin_density=spin_density_dict[T][ia_nuclei]
                         dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
                         
-                    elif ( hasattr(self,f'dist_intra{parameter_stype}')  )and ia == "intra":  
+                    elif ( hasattr(self,f'dist_intra{parameter_stype}')  )and ia == "intra" and not force:  
                         doac_intra= dist_intra_dict[T][ia_nuclei] 
                         dist= 1/(doac_intra*self.dist_si)**6
                         
-                    else:
+                    elif force:
                         dist=dist_dict[T][ia_nuclei] 
                         dist*=np.reciprocal(self.dist_si)**6 
 
@@ -388,6 +388,7 @@ class DDrelax():
         for nuclei in yDict.keys():
             cum_sum=[]
             Temp=list(yDict[nuclei].keys())[skip:]
+            print("used temperatures:", Temp)
             for T in Temp:
                 eta=nmrdu.VFT(T,*vft_params)
                 
@@ -398,7 +399,7 @@ class DDrelax():
                 yData=yDict[nuclei][T]
                 yData=yData/max(yData)
                 
-                extrapol=np.mean(yDict[nuclei][Tmax][-200:])
+                extrapol=np.mean(yDict[nuclei][Tmax][-500:])
                 
                 _interpol1=interp1d(xData_w ,yData ,fill_value=(1,extrapol), bounds_error=False) 
                 yData_w=_interpol1(xData)
