@@ -213,8 +213,9 @@ class DDrelax():
             box_length_dict[T]=dict()
             for pat1 in self.all_ia:
                 if "inter" in pat1:
-                    job_def=np.loadtxt(f"{path}/{T}K/{job_dir}/myjob.def",dtype=str, usecols=1)
-                    box_length=float(job_def[-1])
+                    job_def=np.loadtxt(f"{path}/{T}K/{job_dir}/myjob.def",dtype=str, usecols=2)
+                    job_def_dict=dict(zip(job_def[0],job_def[1]))
+                    box_length=job_def_dict['BOX_LENGTH_NPT']
                     box_length_dict[T][pat1]=box_length
                     n_spin= n_spin_dict[pat1]
                     spinden_dict[T][pat1]=  n_spin/ (box_length**3)
