@@ -2,6 +2,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.fft import fftfreq,dct
+from scipy.integrate import simps
 from scipy.optimize import curve_fit
 from . import utils as nmrdu
 
@@ -87,10 +88,12 @@ class DDrelax():
         con_all=dict()
         con_av=dict()
         dist_dict=dict()
+        tau_dict=dict()
         for T in filedict.keys():
             con_all[T]=dict()
             con_av[T]=dict()
             dist_dict[T]=dict()
+            tau_dict[T]=dict()
             for pat1 in filedict[T].keys() :
                 con_all[T][pat1]=dict()
                 #check if tupel or dict
@@ -103,12 +106,21 @@ class DDrelax():
                         xData, yData = self.convert_average(filedict[T][pat1][pat2])
                         con_all[T][pat1][pat2]= yData
                         cum_sum+=yData
-                    dist_dict[T][pat1]= cum_sum[0]
+                        
+                    if stype !='rdf':
+                        dist_dict[T][pat1]= cum_sum[0]
+                        integ=simps(cum_sum, xData)
+                        tau_dict[T][pat1]= integ /cum_sum[0]
+                        
                     con_av[T][pat1]=cum_sum
                     
                 else: 
                     xData, yData = self.convert_average(filedict[T][pat1])
-                    dist_dict[T][pat1]= yData[0]
+                    if stype !='rdf':
+                        dist_dict[T][pat1]= yData[0]
+                        integ=simps(yData, xData)
+                        tau_dict[T][pat1]= integ /yData[0]
+                        
                     con_av[T][pat1]= yData
 
         if stype in ['short','inter','long']:
@@ -116,6 +128,7 @@ class DDrelax():
             self.set_stype( 'g2',stype,con_all, restype='all')
             self.set_stype('g2',stype, con_av)
             self.set_stype('dist',stype, dist_dict)
+            self.set_stype('tau',stype, tau_dict)
             self.set_stype('ts',stype, xData)
         elif stype=='rdf':
             print('rdf assigned')
@@ -266,7 +279,7 @@ class DDrelax():
         
         gyros={'H': 42.577*1e6, 'F':40.053*1e6, 'P':17.253*1e6} # Hz*T^-1
 
-        pre_factor= self.constants*gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist*self.dt_si*512
+        pre_factor= self.constants* gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist*self.dt_si
         
         con=[]
         for b in b_field:
@@ -305,6 +318,7 @@ class DDrelax():
         spin_density_dict=getattr(self, f"spin_density{parameter_stype}")
         dist_intra_dict=getattr(self, f"dist_intra{parameter_stype}")
         dist_dict=getattr(self, f"dist{parameter_stype}")
+        tau_dict=getattr(self, f"tau{parameter_stype}")
 
 
         b_field=freq_list/(42.577*1e6)
@@ -320,15 +334,14 @@ class DDrelax():
                     if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter" and not force:
                         doac=doac_dict[T][ia_nuclei]
                         spin_density=spin_density_dict[T][ia_nuclei]
-                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
-                        
-                    elif ( hasattr(self,f'dist_intra{parameter_stype}')  )and ia == "intra" and not force:  
+                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6 *512
+                    elif hasattr(self,f'dist_intra{parameter_stype}')  and ia == "intra" and not force:  
                         doac_intra= dist_intra_dict[T][ia_nuclei] 
-                        dist= 1/(doac_intra*self.dist_si)**6
-                        
+                        dist= 1/(doac_intra*self.dist_si)**6 * 512
                     else:
+                        tau=tau_dict[T][ia_nuclei]
                         dist=dist_dict[T][ia_nuclei] 
-                        dist*=np.reciprocal(self.dist_si)**6 
+                        dist*= tau *np.reciprocal(self.dist_si)**6 
 
                     
                     sdf=sdf_dict[T][ia_nuclei]
@@ -342,18 +355,21 @@ class DDrelax():
 
                 for ia_nuclei in relevant_ia:
                     ia, nuclei,_=ia_nuclei.split("_")
-                            
-                    if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') ) and ia == "inter" and not force:
+                    
+
+                    if ( hasattr(self,f'doac{parameter_stype}') and hasattr(self,f'spin_density{parameter_stype}') )  and ia == "inter" and not force:
+                        print('here')
                         doac= self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T)
                         spin_density=self.interpoalte_parameter(f'spin_density{parameter_stype}',ia_nuclei,T)
-                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
-                        
-                    elif ( hasattr(self,f'dist_intra{parameter_stype}')  )and ia == "intra" and not force:  
+                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6 *512
+                    elif  hasattr(self,f'dist_intra{parameter_stype}') and ia == "intra" and not force:  
+                        print('or here')
                         doac_intra= self.interpoalte_parameter(f'dist_intra{parameter_stype}',ia_nuclei,T)
-                        dist= 1/(doac_intra*self.dist_si)**6
-                        
+                        dist= 1/(doac_intra*self.dist_si)**6 *512 
                     else:
-                        dist=self.interpoalte_parameter(f'dist{parameter_stype}', ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
+                        print(f'not here {ia} {nuclei}')
+                        tau=self.interpoalte_parameter(f'tau{parameter_stype}',ia_nuclei,T)
+                        dist= tau*self.interpoalte_parameter(f'dist{parameter_stype}', ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
 
                     
                     sdf=sdf_dict[T][ia_nuclei]
