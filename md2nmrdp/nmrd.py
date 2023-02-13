@@ -4,6 +4,7 @@ from scipy.interpolate import interp1d
 from scipy.fft import fftfreq,dct
 from scipy.integrate import simps
 from scipy.optimize import curve_fit
+from  numpy.fft import rfft 
 from . import utils as nmrdu
 
 
@@ -225,7 +226,7 @@ class DDrelax():
             print(T)
             spinden_dict[T]=dict()
             box_length_dict[T]=dict()
-            for pat1 in self.all_ia:
+            for pat1 in n_spin_dict.keys():
 
                 key,value=np.loadtxt(f"{path}/{T}K/{job_dir}/myjob.def",dtype=str, usecols=[0,1], unpack=True)
                 job_def_dict=dict(zip(key,value))
@@ -268,7 +269,8 @@ class DDrelax():
                 
                 #cosine transform
                 #NOTE: dt_si will be multiplied later
-                j=dct(corr_norm,norm=None)*dt
+                # j=dct(corr_norm,norm=None)*dt
+                j=rfft(corr_norm).real*dt
 
                 
                 N=len(j)
@@ -300,26 +302,29 @@ class DDrelax():
 
         pre_factor= (2*np.pi)**4 * self.constants* gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity*dist*self.dt_si
         
-        R1_extreme= 2* self.constants* (2*np.pi)**4 * gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity *dist_extreme *np.reciprocal(self.dist_si)**6 *self.dt_si 
         
         con=[]
-        
         for b in b_field:
             
             w1=gyros[nuc1]*b
             w2=gyros[nuc2]*b
             
             if nuc1 == nuc2:
-                spec_av= 1/5
+                spec_av= 3/10
                 J_w=_interpol1(w1) 
                 J_w2=_interpol1(w2*2)
                 R= spec_av*pre_factor*(J_w+ 4*J_w2)
+                
+                R1_extreme= 5* 3/10 *self.constants* (2*np.pi)**4 * gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity *dist_extreme *np.reciprocal(self.dist_si)**6 *self.dt_si 
+
             else:
-                spec_av= 1/15
+                spec_av= 1/10
                 J_w=_interpol1( np.abs(w1-w2) )
                 J_w2=_interpol1(w1)   
                 J_w3=_interpol1(w1+w2)  
                 R= spec_av*pre_factor*(J_w+3*J_w2+6*J_w3)
+                
+                R1_extreme=  self.constants* (2*np.pi)**4 * gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity *dist_extreme *np.reciprocal(self.dist_si)**6 *self.dt_si 
                 
             con.append(R)
         
@@ -378,12 +383,14 @@ class DDrelax():
                     if ia == "inter" :
                         doac=doac_dict[T][ia_nuclei]
                         spin_density=spin_density_dict[T][ia_nuclei]
-                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6  
+                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
+                        # dist= dist_dict[T][ia_nuclei]*np.reciprocal(self.dist_si)**6 
+                          
                         
                     elif ia == "intra":  
                         doac_intra= dist_intra_dict[T][ia_nuclei] 
-                        # n_spin=n_spin_dict[ia_nuclei]
                         dist=np.reciprocal(doac_intra*self.dist_si)**6 
+                        # dist= dist_dict[T][ia_nuclei]*np.reciprocal(self.dist_si)**6 
 
 
                     dist_extreme= tau_dict[T][ia_nuclei] *dist_dict[T][ia_nuclei]
@@ -405,10 +412,12 @@ class DDrelax():
                         doac= self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T)
                         spin_density=self.interpoalte_parameter(f'spin_density{parameter_stype}',ia_nuclei,T)
                         dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6 
+                        # dist=self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
+                        
                     elif ia == "intra":  
                         doac_intra= self.interpoalte_parameter(f'dist_intra{parameter_stype}',ia_nuclei,T)
-                        # n_spin=n_spin_dict[ia_nuclei]
                         dist= np.reciprocal(doac_intra*self.dist_si)**6  
+                        # dist=self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
 
                     dist_extreme=self.interpoalte_parameter(f'tau{parameter_stype}',ia_nuclei,T) *self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T)
                     
@@ -480,7 +489,7 @@ class DDrelax():
     
 
 
-    def plot_Tsuperposition(self, ax, file_path, function, nuclei, T_shift=None, shift=True):
+    def plot_Tsuperposition(self, ax, file_path, function, nuclei, T_shift=None, shift=True, norm=False):
         
 
         xData=getattr(self, function[0])
@@ -501,6 +510,9 @@ class DDrelax():
             
             if "g2" in function[1] and not shift: 
                 yData=yData
+                xData_w=xData 
+            if "g2" in function[1] and not shift and norm: 
+                yData=yData/yData[0]
                 xData_w=xData 
             elif "g2" in function[1] and shift:
                 yData=yData/max(yData)

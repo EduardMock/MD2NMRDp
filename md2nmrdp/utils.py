@@ -151,3 +151,47 @@ def fit_func( func, xData, yData, parameterBounds, bounds, p0=None):
 
     return (xlist, ylist, fittedParameters) 
 
+
+def collect_exp_data(path,skip, nuctype, Tlist,remove_duplex=True):
+ 
+    files = os.listdir(path)
+    sef_files= Tcl().call('lsort', '-dict', fnmatch.filter(files, f"{nuctype}*.sef") )
+    con=[]
+    for f in sef_files[skip::]:
+        T=f[-7:-4]
+        print(T)
+        if int(T) in Tlist:
+            brlx,T1,R1=np.loadtxt(path+"/"+f, skiprows=3, usecols=[0,1,2], unpack=True )
+            brlx,R1 =average_duplicates(brlx,R1)
+            con.append([brlx,R1])
+
+    
+    con=np.array(con)
+    x,y=np.split( np.swapaxes(con,0,1),2)
+    return np.squeeze(x), np.squeeze(y)
+
+
+
+
+def average_duplicates(x,y):
+    x_unique, idx = np.unique(x, return_index=True)
+    y_avg = np.array( [np.mean(y[x == x_unique[i]]) for i in range(len(x_unique))] )
+    return x_unique, y_avg
+
+
+def dict_to_df(dd_dict,outfilename=None, seperate=False):
+    
+    if seperate:
+        for key in dd_dict.keys():
+            df=pd.DataFrame(dd_dict[key])
+            if outfilename is not None:
+                df.round(3).to_csv(outfilename+key, line_terminator= None,  sep =';', quotechar= ' ')
+            else:
+                return df.round(3).to_csv(line_terminator= None,  sep =';', quotechar= ' ') 
+        
+    else:
+        df=pd.DataFrame(dd_dict)    
+        if outfilename is not None:
+            df.round(3).to_csv(outfilename, line_terminator= None,  sep =';', quotechar= ' ')
+        else:
+            return df.round(3).to_csv(line_terminator= None,  sep =';', quotechar= ' ')
