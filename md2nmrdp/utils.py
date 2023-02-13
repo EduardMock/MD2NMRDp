@@ -100,7 +100,7 @@ def rdf_r4(r,gr):
     rdf_r= np.zeros(N_points)
     for count in np.arange(N_points):
         rdf_r[count]= gr[count]* np.reciprocal(r[count])**4
-    return rdf_r*4*np.pi
+    return rdf_r
 
 
 

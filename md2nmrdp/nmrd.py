@@ -172,7 +172,7 @@ class DDrelax():
                 if "inter" in pat1:
                     rdf=self.rdf[T][pat1]
                     rdf_weighted=nmrdu.rdf_r4(self.rdfr,rdf)
-                    rdf_w_sum=simps(rdf_weighted,self.rdfr)
+                    rdf_w_sum=4*np.pi*simps(rdf_weighted,self.rdfr)
                     Iab[T][pat1]=rdf_w_sum
                     doac= np.power(4*np.pi/(3 *rdf_w_sum ),1/3)
                     doac_dict[T][pat1]=doac
@@ -310,25 +310,24 @@ class DDrelax():
             w2=gyros[nuc2]*b
             
             if nuc1 == nuc2:
-                spec_av= 3/10
+                spec_av= 2/5
                 J_w=_interpol1(w1) 
                 J_w2=_interpol1(w2*2)
                 R= spec_av*pre_factor*(J_w+ 4*J_w2)
-                
-                R1_extreme= 5* 3/10 *self.constants* (2*np.pi)**4 * gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity *dist_extreme *np.reciprocal(self.dist_si)**6 *self.dt_si 
+                R1_ext= 2 *self.constants* (2*np.pi)**4 * gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity *dist_extreme *np.reciprocal(self.dist_si)**6 *self.dt_si 
 
             else:
-                spec_av= 1/10
+                spec_av= 2/15
                 J_w=_interpol1( np.abs(w1-w2) )
                 J_w2=_interpol1(w1)   
                 J_w3=_interpol1(w1+w2)  
                 R= spec_av*pre_factor*(J_w+3*J_w2+6*J_w3)
                 
-                R1_extreme=  self.constants* (2*np.pi)**4 * gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity *dist_extreme *np.reciprocal(self.dist_si)**6 *self.dt_si 
+                R1_ext= 2* 10/15 *self.constants* (2*np.pi)**4 * gyros[nuc1]**2 *gyros[nuc2]**2 *self.multiplicity *dist_extreme *np.reciprocal(self.dist_si)**6 *self.dt_si 
                 
             con.append(R)
         
-        return con , R1_extreme
+        return con , R1_ext
     
     
     
