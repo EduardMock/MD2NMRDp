@@ -59,8 +59,12 @@ class DDrelax():
             for f in files:
                 xData,yData=np.loadtxt(f , usecols=[0,1],unpack=True)
                 cum_sum.append(yData)
-            return xData, np.mean(cum_sum,axis=0)
-    
+            if "major" in files[0]:
+                return xData, np.mean(cum_sum,axis=0)
+            elif "total" in files[0]:
+                return xData, np.sum(cum_sum,axis=0)
+            else:
+                print("Error: check file names")
     
     def check_for_att(self, function, restype=''):
         collect=[]
@@ -112,8 +116,10 @@ class DDrelax():
                     for pat2 in filedict[T][pat1].keys():
                         #convert and average intermolecular contribution over residues
                         xData, yData = self.convert_average(filedict[T][pat1][pat2])
+                    
                         con_all[T][pat1][pat2]= yData
                         cum_sum+=yData
+                        
                         
                     if stype !='rdf':
                         dist_dict[T][pat1]= cum_sum[0]
@@ -124,10 +130,15 @@ class DDrelax():
                     
                 else: 
                     xData, yData = self.convert_average(filedict[T][pat1])
+                    
                     if stype !='rdf':
                         dist_dict[T][pat1]= yData[0]
                         integ=simps(yData, xData)
                         tau_dict[T][pat1]= integ /yData[0]
+                    elif stype =='rdf' and 'intra' in pat1:
+                        xData_intra=xData
+                    elif stype =='rdf' and 'inter' in pat1:
+                        xData_inter=xData
                         
                     con_av[T][pat1]= yData
 
@@ -140,7 +151,8 @@ class DDrelax():
             self.set_stype('ts',stype, xData)
         elif stype=='rdf':
             print('rdf assigned')
-            self.set_stype( 'rdf', stype, xData)
+            self.set_stype( 'rdf', stype, xData_intra,restype='_intra')
+            self.set_stype( 'rdf', stype, xData_inter,restype='_inter')
             self.set_stype( 'rdf', stype, con_all, add_stype=False, restype='all')
             self.set_stype( 'rdf', stype, con_av, add_stype=False)
         elif stype == 'reor_corr':
@@ -193,9 +205,9 @@ class DDrelax():
     
 
         
- 
-        
 
+
+ 
     def calc_spin_density(self,path,job_dir,n_spin_dict,stype='i'):
         
         setattr(self, 'n_spin', n_spin_dict)
@@ -247,9 +259,6 @@ class DDrelax():
                 corr_norm=deepcopy(corr)/norm_factor
 
                 
-                #cosine transform
-                #NOTE: dt_si will be multiplied later
-                # j=dct(corr_norm,norm=None)*dt
                 j=rfft(corr_norm).real*dt
 
                 
@@ -331,7 +340,7 @@ class DDrelax():
         except AttributeError:
             raise AttributeError("DDrelax object has no attribute 'doac' ")
         
-        
+
             
         dist_dict=getattr(self, f"dist{parameter_stype}")
         tau_dict=getattr(self, f"tau{parameter_stype}")
@@ -402,7 +411,6 @@ class DDrelax():
         
         return R1_array
     
-
 
     
     def Tsuperposition(self, file_path, function, T_shift, skip, new_Temp=None):

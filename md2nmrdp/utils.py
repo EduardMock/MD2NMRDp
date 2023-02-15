@@ -102,6 +102,20 @@ def rdf_r4(r,gr):
         rdf_r[count]= gr[count]* np.reciprocal(r[count])**4
     return rdf_r
 
+def rdf_r6(r,gr):
+    N_points=len(gr)
+    rdf_r= np.zeros(N_points)
+    for count in np.arange(N_points):
+        rdf_r[count]= gr[count]* np.reciprocal(r[count])**6
+    return rdf_r
+
+
+def integrate_rdf(rdf,rdfr,spind):
+    N_points = len(rdfr)
+    res = np.zeros(N_points)
+    for i in range(len(rdf)):
+        res[i]=rdf[i]*4*np.pi*rdfr[i]**2
+    return res*spind
 
 
 def VFT(T,eta0,B,T0):   
@@ -121,7 +135,7 @@ from scipy.optimize import differential_evolution
 import warnings
 
 
-def fit_func( func, xData, yData, parameterBounds, bounds, p0=None):
+def fit_func( func, xData, yData, parameterBounds, bounds=None, p0=None):
     
     def sumOfSquaredError(parameterTuple):
         warnings.filterwarnings("ignore") # do not print warnings by genetic algorithm
