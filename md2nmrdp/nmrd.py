@@ -193,20 +193,6 @@ class DDrelax():
     
 
         
-    def collect_dist_intra(self,path,stype='i',job_dir="dist_intra"):
-
-        dist_intra_dict=dict()
-        for T in self.Temp:
-            dist_intra_dict[T]=dict()
-            for pat1 in self.all_ia:
-                if "intra" in pat1:
-                    _, nuc, iontype= pat1.split('_')
-                    files=nmrdu.listdir_fullpath(f"{path}/{T}K/{job_dir}")
-                    file=nmrdu.filter_files(files,pattern=f"*{nuc}*{iontype}*")
-                    dist_intra= np.loadtxt(file[0], skiprows=1, dtype=float)
-                    dist_intra_dict[T][pat1]=dist_intra
-                    
-        self.set_stype( 'dist_intra', stype, dist_intra_dict)
  
         
 
@@ -345,16 +331,7 @@ class DDrelax():
         except AttributeError:
             raise AttributeError("DDrelax object has no attribute 'doac' ")
         
-        try:    
-            n_spin_dict=getattr(self, f"n_spin")
-            spin_density_dict=getattr(self, f"spin_density{parameter_stype}")
-        except AttributeError:
-            raise AttributeError("DDrelax object has no attribute 'n_spin' or 'spin_density' ")
         
-        try:
-            dist_intra_dict=getattr(self, f"dist_intra{parameter_stype}")
-        except AttributeError:
-            raise AttributeError("DDrelax object has no attribute 'dist_intra' ")
             
         dist_dict=getattr(self, f"dist{parameter_stype}")
         tau_dict=getattr(self, f"tau{parameter_stype}")
@@ -376,13 +353,11 @@ class DDrelax():
                     if ia == "inter" :
                         doac=doac_dict[T][ia_nuclei]
                         spin_density=spin_density_dict[T][ia_nuclei]
-                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6
+                        dist= spin_density * 4*np.pi / (3* doac**3) *np.reciprocal(self.dist_si)**6
                         # dist= dist_dict[T][ia_nuclei]*np.reciprocal(self.dist_si)**6 
                           
-                        
                     elif ia == "intra":  
-                        doac_intra= dist_intra_dict[T][ia_nuclei] 
-                        dist=np.reciprocal(doac_intra*self.dist_si)**6 
+                        dist= np.reciprocal(doac_dict[T][ia_nuclei])**6 *np.reciprocal(self.dist_si)**6 
                         # dist= dist_dict[T][ia_nuclei]*np.reciprocal(self.dist_si)**6 
 
 
@@ -404,12 +379,11 @@ class DDrelax():
                     if ia == "inter":
                         doac= self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T)
                         spin_density=self.interpoalte_parameter(f'spin_density{parameter_stype}',ia_nuclei,T)
-                        dist= spin_density * 4*np.pi / (doac**3) *np.reciprocal(self.dist_si)**6 
+                        dist= spin_density * 4*np.pi / (3* doac**3) *np.reciprocal(self.dist_si)**6 
                         # dist=self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
                         
                     elif ia == "intra":  
-                        doac_intra= self.interpoalte_parameter(f'dist_intra{parameter_stype}',ia_nuclei,T)
-                        dist= np.reciprocal(doac_intra*self.dist_si)**6  
+                        dist=  np.reciprocal(self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T))**6 *np.reciprocal(self.dist_si)**6 
                         # dist=self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
 
                     dist_extreme=self.interpoalte_parameter(f'tau{parameter_stype}',ia_nuclei,T) *self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T)
