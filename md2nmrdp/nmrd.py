@@ -171,26 +171,20 @@ class DDrelax():
                 
                 if "inter" in pat1:
                     rdf=self.rdf[T][pat1]
-                    rdf_weighted=nmrdu.rdf_r4(self.rdfr,rdf)
-                    rdf_w_sum=4*np.pi*simps(rdf_weighted,self.rdfr)
+                    rdf_weighted=nmrdu.rdf_r4(self.rdfr_inter,rdf)
+                    rdf_w_sum=4*np.pi*simps(rdf_weighted,self.rdfr_inter)
                     Iab[T][pat1]=rdf_w_sum
                     doac= np.power(4*np.pi/(3 *rdf_w_sum ),1/3)
                     doac_dict[T][pat1]=doac
-
-                # if "intra" in pat1:
-                #     skip=5
-                #     rdf=self.rdf[T][pat1]
-                #     rdf_weighted=nmrdu.rdf_r4(self.rdfr[skip:],rdf[skip:])
-                #     rdf_w_sum=nmrdu.integrate(self.rdfr[skip:], rdf_weighted)
-                #     # find last y data point that is larger than 0
-                #     non_zero = [i for i in rdf if i]
-                #     #find idx of last non zero element
-                #     idx = np.where(rdf == non_zero[-1])
-                #     mol_v=self.rdfr[idx]**3
-                #     molV[T][pat1]=mol_v[0]
-                #     Iab[T][pat1]=np.mean(rdf_w_sum[-50:])/mol_v
-                #     doac= np.power(4*np.pi/(3 *rdf_w_sum[-1] ),1/3)
-                #     doac_dict[T][pat1]=doac
+                if "intra" in pat1:
+                    rdf=self.rdf[T][pat1]
+                    dr=self.rdfr_intra[1]-self.rdfr_intra[0]
+                    rdf_weighted=nmrdu.rdf_r6(self.rdfr_intra[1:],rdf[1:]/dr)
+                    rdf_w_sum=simps(rdf_weighted,self.rdfr_intra[1:])
+                    Iab[T][pat1]=rdf_w_sum
+                    doac= np.power(rdf_w_sum , -1/6)
+                    print(doac)
+                    doac_dict[T][pat1]=doac
         
         self.set_stype( 'doac', stype, doac_dict)
         self.set_stype( 'Iab', stype, Iab)
