@@ -195,7 +195,6 @@ class DDrelax():
                     rdf_w_sum=simps(rdf_weighted,self.rdfr_intra[1:])
                     Iab[T][pat1]=rdf_w_sum
                     doac= np.power(rdf_w_sum , -1/6)
-                    print(doac)
                     doac_dict[T][pat1]=doac
         
         self.set_stype( 'doac', stype, doac_dict)
@@ -340,6 +339,10 @@ class DDrelax():
         except AttributeError:
             raise AttributeError("DDrelax object has no attribute 'doac' ")
         
+        try:    
+            spin_density_dict=getattr(self, f"spin_density{parameter_stype}")
+        except AttributeError:
+            raise AttributeError("DDrelax object has no attribute 'n_spin' or 'spin_density' ")
 
             
         dist_dict=getattr(self, f"dist{parameter_stype}")
