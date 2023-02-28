@@ -164,13 +164,12 @@ class DDrelax():
 
 
 
-    def calc_doac(self, stype='i'):
+    def calc_doac(self, n_spin_dict,stype='i'):
         
         try:
             rdf=getattr(self, f'rdf')
         except AttributeError:
             raise AttributeError("DDrelax object has no attribute 'rdf'")    
-        
         
         doac_dict=dict()
         Iab=dict()
@@ -189,12 +188,12 @@ class DDrelax():
                     doac= np.power(4*np.pi/(3 *rdf_w_sum ),1/3)
                     doac_dict[T][pat1]=doac
                 if "intra" in pat1:
+                    n_spin=n_spin_dict[pat1]
                     rdf=self.rdf[T][pat1]
-                    dr=self.rdfr_intra[1]-self.rdfr_intra[0]
-                    rdf_weighted=nmrdu.rdf_r6(self.rdfr_intra[1:],rdf[1:]/dr)
+                    rdf_weighted=nmrdu.rdf_r6(self.rdfr_intra[1:],rdf[1:])
                     rdf_w_sum=simps(rdf_weighted,self.rdfr_intra[1:])
                     Iab[T][pat1]=rdf_w_sum
-                    doac= np.power(rdf_w_sum , -1/6)
+                    doac= np.power(rdf_w_sum/n_spin , -1/6)
                     doac_dict[T][pat1]=doac
         
         self.set_stype( 'doac', stype, doac_dict)
@@ -218,7 +217,6 @@ class DDrelax():
             spinden_dict[T]=dict()
             box_length_dict[T]=dict()
             for pat1 in n_spin_dict.keys():
-
                 key,value=np.loadtxt(f"{path}/{T}K/{job_dir}/myjob.def",dtype=str, usecols=[0,1], unpack=True)
                 job_def_dict=dict(zip(key,value))
                 box_length=float(job_def_dict['BOX_LENGTH_NPT'])
@@ -336,8 +334,10 @@ class DDrelax():
         #prefactor        
         try:
             doac_dict=getattr(self, f"doac{parameter_stype}")
+            n_spin_dict=getattr(self, f"n_spin")
         except AttributeError:
             raise AttributeError("DDrelax object has no attribute 'doac' ")
+        
         
         try:    
             spin_density_dict=getattr(self, f"spin_density{parameter_stype}")
@@ -368,8 +368,9 @@ class DDrelax():
                         dist= spin_density * 4*np.pi / (3* doac**3) *np.reciprocal(self.dist_si)**6
                         # dist= dist_dict[T][ia_nuclei]*np.reciprocal(self.dist_si)**6 
                           
-                    elif ia == "intra":  
-                        dist= np.reciprocal(doac_dict[T][ia_nuclei])**6 *np.reciprocal(self.dist_si)**6 
+                    elif ia == "intra": 
+                        n_spin=n_spin_dict[ia_nuclei]
+                        dist= n_spin*np.reciprocal(doac_dict[T][ia_nuclei])**6 *np.reciprocal(self.dist_si)**6 
                         # dist= dist_dict[T][ia_nuclei]*np.reciprocal(self.dist_si)**6 
 
 
@@ -395,7 +396,8 @@ class DDrelax():
                         # dist=self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
                         
                     elif ia == "intra":  
-                        dist=  np.reciprocal(self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T))**6 *np.reciprocal(self.dist_si)**6 
+                        n_spin=n_spin_dict[ia_nuclei]
+                        dist= n_spin* np.reciprocal(self.interpoalte_parameter(f'doac{parameter_stype}',ia_nuclei,T))**6 *np.reciprocal(self.dist_si)**6 
                         # dist=self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T) *np.reciprocal(self.dist_si)**6 
 
                     dist_extreme=self.interpoalte_parameter(f'tau{parameter_stype}',ia_nuclei,T) *self.interpoalte_parameter(f'dist{parameter_stype}',ia_nuclei,T)
