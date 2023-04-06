@@ -230,6 +230,21 @@ class DDrelax():
         self.set_stype( 'box_length', stype, box_length_dict)
     
         
+    def bnp_correction_g2(self,path,jobdir,stype='i'):
+
+        for T in self.Temp:
+            print(T)
+            spinden_dict[T]=dict()
+            box_length_dict[T]=dict()
+            for pat1 in n_spin_dict.keys():
+                key, value = np.loadtxt(f"{path}/results/{jobdir}/diff_{self.system}.dat", dtype=float, usecols=[0,1], skiprows=1, unpack=True)
+                diff_dict=dict(zip(key,value))
+
+                # if "inter" in pat1:
+                #     n_spin= n_spin_dict[pat1]
+                #     spinden_dict[T][pat1]=  n_spin/ (box_length**3)
+
+        self.set_stype( 'diff_coeff', stype, diff_dict)
         
         
         
