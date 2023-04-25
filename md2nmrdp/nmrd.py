@@ -230,29 +230,73 @@ class DDrelax():
         self.set_stype( 'box_length', stype, box_length_dict)
     
         
-    def bnp_correction_g2(self,path,jobdir,stype='i'):
+    def bnp_correction_g2(self,file,stype='i'):
 
-        for T in self.Temp:
-            print(T)
-            spinden_dict[T]=dict()
-            box_length_dict[T]=dict()
-            for pat1 in n_spin_dict.keys():
-                key, value = np.loadtxt(f"{path}/results/{jobdir}/diff_{self.system}.dat", dtype=float, usecols=[0,1], skiprows=1, unpack=True)
-                diff_dict=dict(zip(key,value))
-
-                # if "inter" in pat1:
-                #     n_spin= n_spin_dict[pat1]
-                #     spinden_dict[T][pat1]=  n_spin/ (box_length**3)
-
-        self.set_stype( 'diff_coeff', stype, diff_dict)
         
-        
-        
-    def calc_sdf(self,stype='i'):
-
         try:
             g2=getattr(self, f"g2{stype}")
+            doac=getattr(self, f"doac{stype}")
             ts=getattr(self, f"ts{stype}")
+        except AttributeError:
+            raise AttributeError("DDrelax object has no attribute 'g2' or 'ts' ")  
+        
+
+
+
+        T, cat, ani = np.loadtxt(f"{file}/diff_{self.system}.dat", dtype=float, usecols=[0,1,2], skiprows=1, unpack=True)
+        Temp = [int(Ts) for Ts in T]
+        diff_dict_cat=dict(zip(Temp,cat))
+        diff_dict_ani=dict(zip(Temp,ani))
+        self.set_stype( 'diff_coeff_cat', stype, diff_dict_cat)
+        self.set_stype( 'diff_coeff_ani', stype, diff_dict_ani)
+
+        g2_corr=dict()  #collect all sdf
+        # calc timestep
+        dt=(ts[1]-ts[0]) #*dt_si
+        
+
+        def corr_func(t,doac, diff):
+            return np.power(diff,3)/( 6*np.power(np.pi,1/2)*np.power(doac*t,3/2) )
+
+        
+        for T in g2.keys():
+            g2_corr[T]=dict()
+            for pat1 in g2[T].keys():
+                ia, nuclei, ions= pat1.split("_")
+                if ia == "inter":
+                    #grep correlation function and normalize
+                    corr=g2[T][pat1]
+                    norm_factor=max(corr)
+                    corr_norm=deepcopy(corr)/norm_factor
+                    l_corr=len(corr_norm)
+                    corr_norm_1=corr_norm[:l_corr//2]
+
+                    trans_dict={"aniani": self.diff_coeff_anii[T]*2,
+                                "catcat": self.diff_coeff_cati[T]*2, 
+                                "catani": self.diff_coeff_cati[T]+self.diff_coeff_anii[T],
+                                "anicat": self.diff_coeff_anii[T]+self.diff_coeff_cati[T],
+                                }
+                    #calc correction
+                    diff=trans_dict[ions]
+                    timesteps=ts[l_corr//2:]
+
+                    corr_norm_2=corr_func(timesteps,doac[T][pat1],diff) 
+
+                    corr_corr=np.append(corr_norm_1,corr_norm_2,axis=0)
+                    g2_corr[T][pat1]=corr_corr
+                else:
+                    g2_corr[T][pat1]=g2[T][pat1]
+        self.set_stype( 'g2_corr', stype, g2_corr)
+
+    def calc_sdf(self,stype='i', use_bnp_corr=False):
+
+        try:
+            if use_bnp_corr:
+                g2=getattr(self, f"g2_corr{stype}")
+                ts=getattr(self, f"ts{stype}")
+            else:
+                g2=getattr(self, f"g2{stype}")
+                ts=getattr(self, f"ts{stype}")
         except AttributeError:
             raise AttributeError("DDrelax object has no attribute 'g2' or 'ts' ")  
         
@@ -434,7 +478,9 @@ class DDrelax():
 
     
     def Tsuperposition(self, file_path, function, T_shift, skip, new_Temp=None):
+        
 
+        
         xData=getattr(self, function[0])
         yDict=getattr(self, function[1])
 
@@ -486,6 +532,8 @@ class DDrelax():
 
     def plot_Tsuperposition(self, ax, file_path, function, nuclei, T_shift=None, shift=True, norm=False):
         
+
+
 
         xData=getattr(self, function[0])
         yDict=getattr(self, function[1])
